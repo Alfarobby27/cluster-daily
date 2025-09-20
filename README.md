@@ -3,9 +3,9 @@
 Judul: Penerapan Metode K-Means Clustering untuk Pengelompokan Aktivitas Harian pada divisi Application Support PT Bentang Altur Teknologia
 
 Saya bekerja sebagai Application Support yang bertugas untuk menyiapkan data (mem push data) aplikasi SAM SNS, SAM PS, dan SAM MD ke firebase. Jadi dalam proses push data itu diawali dengan aplikasi push data bernama Scheduler yang berjalan secara otomatis, setelah scheduler complete push data, biasanya ada sisa-sisa data yang belum terpush ke firebase. Lalu tugas saya mem push sisa data tersebut secara manual menggunakan aplikasi push data juga bernama Bridge. Rencananya saya menggunakan K-Means Clustering itu untuk mengelompokan data tersebut menjadi 3 cluster:
-Cluster 0 = Aktivitas Ringan (durasi kerja dari awal mulai scheduler sampai selesai bridge itu singkat)
-Cluster 1 = Aktivitas Berat / Prioritas (durasi kerjanya panjang / lama)
-Cluster 2 = Aktivitas Tertunda (durasi = 0, biasanya karena log datanya stuck karena harus diperbaiki terlebih dahulu)
+Cluster 1 = Aktivitas Ringan (durasi kerja dari awal mulai scheduler sampai selesai bridge itu singkat)
+Cluster 2 = Aktivitas Berat / Prioritas (durasi kerjanya panjang / lama)
+Cluster 3 = Aktivitas Tertunda (durasi = 0, biasanya karena log datanya stuck karena harus diperbaiki terlebih dahulu)
 
 ## How to contribute
 
