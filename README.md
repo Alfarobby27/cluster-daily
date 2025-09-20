@@ -1,3 +1,12 @@
+### Latar Belakang Singkat
+
+Judul: Penerapan Metode K-Means Clustering untuk Pengelompokan Aktivitas Harian pada divisi Application Support PT Bentang Altur Teknologia
+
+Saya bekerja sebagai Application Support yang bertugas untuk menyiapkan data (mem push data) aplikasi SAM SNS, SAM PS, dan SAM MD ke firebase. Jadi dalam proses push data itu diawali dengan aplikasi push data otomatis bernama Scheduler yang berjalan secara otomatis, setelah scheduler complete push data, biasanya ada sisa-sisa data yang belum terpush ke firebase. Lalu tugas saya mem push sisa data tersebut secara manual menggunakan aplikasi push data juga bernama Bridge. Rencananya saya menggunakan K-Means Clustering itu untuk mengelompokan data tersebut menjadi 3 cluster:
+Cluster 0 = Aktivitas Ringan (durasi kerja dari awal mulai scheduler sampai selesai bridge itu singkat <1jam)
+Cluster 1 = Aktivitas Berat / Prioritas (durasi kerjanya panjang / lama)
+Cluster 2 = Aktivitas Tertunda (durasi = 0, biasanya karena log datanya stuck karena harus diperbaiki terlebih dahulu)
+
 ## How to contribute
 
 1. Clone repo
@@ -19,6 +28,146 @@ venv\Scripts\activate      # Windows
 ```bash
 pip install -r requirements.txt
 ```
+
+### Logika K-Means Clustering saya
+
+1. Ambil Data dari Database
+
+```bash
+conn = get_connection()
+df = pd.read_sql_query("SELECT * FROM aktivitas", conn)
+if df.empty:
+    conn.close()
+    return {"status":"empty"}
+```
+
+- Mengambil seluruh data dari tabel `aktivitas`.
+- Jika tabel kosong, langsung tutup koneksi dan kembalikan status `empty`.
+
+---
+
+2. Persiapkan Data Durasi
+
+```bash
+df['duration_minutes'] = df['duration_minutes'].fillna(0).astype(int)
+```
+
+- Mengisi nilai kosong (`NaN`) pada kolom `duration_minutes` dengan 0.
+- Mengubah tipe data menjadi integer.
+
+---
+
+3. Tandai Aktivitas Tertunda
+
+```bash
+cur = conn.cursor()
+cur.execute("UPDATE aktivitas SET cluster = 3 WHERE duration_minutes = 0")
+conn.commit()
+```
+
+- Aktivitas dengan durasi **0 menit** dianggap tertunda.
+- Semua aktivitas tertunda ini diberi `cluster = 3`.
+
+---
+
+4. Pisahkan Aktivitas Aktif
+
+```bash
+active = df[df['duration_minutes'] > 0].copy()
+if active.shape[0] == 0:
+    conn.close()
+    return {"status":"only_tertunda"}
+```
+
+- Membuat subset `active` untuk aktivitas yang durasinya > 0.
+- Jika tidak ada aktivitas aktif, kembalikan status `only_tertunda`.
+
+---
+
+5. Persiapkan K-Means
+
+```bash
+X = active[['duration_minutes']].values.astype(float)
+scaler = StandardScaler()
+Xs = scaler.fit_transform(X)
+k = 2 if active.shape[0] >= 2 else 1
+kmeans = KMeans(n_clusters=k, random_state=42, n_init="auto")
+labels = kmeans.fit_predict(Xs)
+active['klabel'] = labels
+```
+
+- Mengambil kolom durasi dan mengubahnya jadi float.
+- **StandardScaler**: menormalisasi durasi supaya K-Means lebih akurat.
+- Tentukan jumlah cluster `k`:
+
+  - Minimal 2 cluster jika ada ≥ 2 aktivitas.
+  - Jika hanya 1 aktivitas, `k=1`.
+
+- Jalankan **K-Means** untuk memberi label (`klabel`) pada setiap aktivitas.
+
+---
+
+6. Tentukan Cluster “Ringan” vs “Berat"
+
+```bash
+means = active.groupby('klabel')['duration_minutes'].mean().sort_values()
+sorted_labels = list(means.index)
+mapping = {}
+if len(sorted_labels) == 1:
+    mapping[sorted_labels[0]] = 1
+else:
+    mapping[sorted_labels[0]] = 1
+    mapping[sorted_labels[-1]] = 2
+```
+
+- Hitung rata-rata durasi untuk setiap cluster K-Means.
+- Urutkan dari **durasi terkecil → durasi terbesar**.
+- Buat mapping:
+
+  - Cluster dengan durasi lebih kecil → `1` (ringan)
+  - Cluster dengan durasi lebih besar → `2` (berat)
+
+> Jadi cluster 1 = aktivitas ringan, cluster 2 = aktivitas berat, cluster 3 = tertunda.
+
+---
+
+7. Update Database
+
+```bash
+for _, row in active.iterrows():
+    cluster_value = mapping.get(row['klabel'], 1)
+    cur.execute("UPDATE aktivitas SET cluster = ? WHERE id = ?", (int(cluster_value), int(row['id'])))
+conn.commit()
+conn.close()
+```
+
+- Iterasi semua aktivitas aktif.
+- Update kolom `cluster` di database sesuai mapping.
+- Commit dan tutup koneksi.
+
+---
+
+8. Return Status
+
+```bash
+return {"status":"ok", "count_active": active.shape[0]}
+```
+
+- Mengembalikan status `ok` dan jumlah aktivitas aktif yang berhasil diklaster.
+
+---
+
+- Kesimpulan Logika
+
+1. Ambil semua aktivitas dari DB.
+2. Tandai aktivitas **tertunda** (`duration=0`) → `cluster 3`.
+3. Aktivitas aktif (`duration>0`) → lakukan **K-Means** untuk membagi menjadi 2 cluster:
+
+   - **Cluster 1**: durasi pendek → ringan.
+   - **Cluster 2**: durasi panjang → berat.
+
+4. Simpan hasil cluster kembali ke database.
+5. Return status.
 
 ### Tutorial yang saya ikuti sebelumnya (Koreksi jika salah)
 
